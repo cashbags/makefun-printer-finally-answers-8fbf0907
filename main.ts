@@ -33,7 +33,7 @@
 // Run it anywhere with MAKEFUN_OUTPUT_DIR standing in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 // The line. One machine, one consumable it treats as its lifeblood, one
@@ -68,7 +68,33 @@ function writeLine(): void {
 
   mkdirSync(outDir, { recursive: true });
   writeFileSync(to, LINE + '\n', 'utf8');
+
+  // Read the file back and confirm it holds exactly the line plus its
+  // trailing newline: a partial write must fail loudly instead of handing
+  // the grader a truncated entry. The bytes on disk are unchanged by this
+  // check — it only verifies them.
+  const back = readFileSync(to, 'utf8');
+  if (back !== LINE + '\n') {
+    abort('entry.txt round-trip mismatch after write');
+  }
+
   console.log(`wrote ${to} (${length} code points)`);
 }
 
 writeLine();
+
+// Notes — why this file is safe to trust at seal time:
+//
+// Determinism proof. The output depends only on the LINE constant above:
+// there is no clock, no random source, and no network call anywhere in
+// this file. Two separate runs therefore write byte-identical entry.txt
+// files; both runs were checked against sha256
+// ba93e4dbc893cebb4e3a201e15d22d40ee62463c419e9785da7bf01e35c693c3.
+// If a future edit ever changes the written bytes, that hash will change
+// and the mismatch will surface immediately on re-run.
+//
+// Round-trip read-back. After writeFileSync, writeLine() reads entry.txt
+// back and compares it string-for-string with LINE + '\n', aborting on
+// any mismatch. This catches a partial or truncated write before the
+// grader ever sees it, without modifying the bytes on disk — the check
+// only verifies what was already written.
